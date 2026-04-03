@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Claim Calc">
+<title>Tire Claim Calculator</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-secondary: #f5f5f4;
+    --bg-success: #eaf3de;
+    --bg-warning: #faeeda;
+    --bg-danger: #fcebeb;
+    --bg-info: #e6f1fb;
+    --text: #1a1a18;
+    --text-secondary: #5f5e5a;
+    --text-tertiary: #888780;
+    --text-success: #3b6d11;
+    --text-warning: #854f0b;
+    --text-danger: #a32d2d;
+    --text-info: #185fa5;
+    --border: rgba(0,0,0,0.12);
+    --border-strong: rgba(0,0,0,0.25);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --bg-secondary: #2a2a28;
+      --bg-success: #173404;
+      --bg-warning: #412402;
+      --bg-danger: #501313;
+      --bg-info: #042c53;
+      --text: #f0ede8;
+      --text-secondary: #b4b2a9;
+      --text-tertiary: #888780;
+      --text-success: #c0dd97;
+      --text-warning: #fac775;
+      --text-danger: #f7c1c1;
+      --text-info: #b5d4f4;
+      --border: rgba(255,255,255,0.1);
+      --border-strong: rgba(255,255,255,0.22);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; background: var(--bg-secondary); color: var(--text); min-height: 100vh; }
+  .header { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 16px 20px 14px; position: sticky; top: 0; z-index: 100; }
+  .header-title { font-size: 17px; font-weight: 600; color: var(--text); }
+  .header-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 16px; }
+  .section { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+  .section.disabled { opacity: 0.38; pointer-events: none; }
+  .step-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--bg-secondary); border: 0.5px solid var(--border-strong); font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); flex-shrink: 0; transition: all 0.2s; }
+  .step-num.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .step-num.done { background: var(--bg-success); color: var(--text-success); border-color: transparent; }
+  .step-num.done::after { content: '✓'; font-size: 13px; }
+  .step-num.done { font-size: 0; }
+  .step-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .db-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 14px; }
+  .db-status.loading { background: var(--bg-secondary); color: var(--text-secondary); }
+  .db-status.ok { background: var(--bg-success); color: var(--text-success); }
+  .db-status.err { background: var(--bg-danger); color: var(--text-danger); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .loading-dot { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .db-meta { font-size: 12px; color: var(--text-tertiary); margin-top: 6px; }
+  .db-meta.warn { color: var(--text-warning); }
+  .refresh-btn { display: inline-block; font-size: 12px; padding: 5px 10px; border: 0.5px solid var(--border-strong); border-radius: 20px; background: none; color: var(--text-secondary); cursor: pointer; margin-top: 8px; }
+  .search-wrap { position: relative; }
+  input[type=text], input[type=number] { width: 100%; padding: 12px 14px; border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 16px; background: var(--bg); color: var(--text); outline: none; transition: border-color 0.15s; -webkit-appearance: none; }
+  input:focus { border-color: var(--text); }
+  input::placeholder { color: var(--text-tertiary); }
+  .dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--bg); border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); z-index: 50; max-height: 240px; overflow-y: auto; box-shadow: 0 4px 24px rgba(0,0,0,0.1); }
+  .dropdown-item { padding: 12px 14px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 0.5px solid var(--border); }
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:active { background: var(--bg-secondary); }
+  .dropdown-item span { display: block; font-size: 12px; color: var(--text-secondary); font-weight: 400; margin-top: 3px; }
+  .info-box { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 2px 0; margin-top: 12px; }
+  .info-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 0.5px solid var(--border); }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { font-size: 13px; color: var(--text-secondary); }
+  .info-val { font-size: 14px; font-weight: 500; color: var(--text); text-align: right; max-width: 60%; }
+  .confirm-box { margin-top: 12px; border: 1px solid; border-radius: var(--radius-sm); padding: 12px 14px; border-color: #ef9f27; background: var(--bg-warning); transition: all 0.2s; }
+  .confirm-box.confirmed { border-color: #639922; background: var(--bg-success); }
+  .confirm-label { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13px; color: var(--text-warning); line-height: 1.5; }
+  .confirm-label.confirmed { color: var(--text-success); }
+  .confirm-label input[type=checkbox] { width: 18px; height: 18px; margin-top: 1px; flex-shrink: 0; cursor: pointer; accent-color: #639922; }
+  .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+  .input-row { display: flex; gap: 10px; }
+  .input-row > div { flex: 1; }
+  .sub-label { font-size: 12px; color: var(--text-tertiary); margin-top: 5px; }
+  .field-warn { font-size: 13px; color: var(--text-danger); margin-top: 8px; background: var(--bg-danger); padding: 8px 12px; border-radius: var(--radius-sm); }
+  .result-card { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 24px 20px; text-align: center; }
+  .result-pct { font-size: 64px; font-weight: 700; color: var(--text); line-height: 1; letter-spacing: -2px; }
+  .result-sub { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+  .result-raw { font-size: 12px; color: var(--text-tertiary); margin-top: 5px; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 20px; margin-top: 12px; }
+  .badge.full { background: var(--bg-success); color: var(--text-success); }
+  .badge.high { background: var(--bg-info); color: var(--text-info); }
+  .badge.mid { background: var(--bg-warning); color: var(--text-warning); }
+  .badge.low { background: var(--bg-danger); color: var(--text-danger); }
+  .formula { font-size: 12px; color: var(--text-tertiary); text-align: center; margin-top: 14px; font-family: monospace; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">Tire Claim Calculator</div>
+  <div class="header-sub">Pro-rata compensation</div>
+</div>
+
+<div class="wrap">
+
+  <!-- STEP 1 -->
+  <div class="section" id="sec1">
+    <div class="step-header">
+      <div class="step-num active" id="num1">1</div>
+      <div class="step-title">아티클 DB</div>
+    </div>
+    <div class="db-status loading" id="dbStatus">
+      <div class="dot loading-dot"></div>
+      데이터 불러오는 중...
+    </div>
+    <div class="db-meta hidden" id="dbMeta"></div>
+    <button class="refresh-btn hidden" id="refreshBtn" onclick="loadData()">↻ 다시 불러오기</button>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="section disabled" id="sec2">
+    <div class="step-header">
+      <div class="step-num" id="num2">2</div>
+      <div class="step-title">아티클 검색</div>
+    </div>
+    <div class="search-wrap">
+      <input type="text" id="articleInput" placeholder="아티클 번호 입력..." autocomplete="off" oninput="onArticleInput()" onfocus="onArticleInput()">
+      <div class="dropdown hidden" id="dropdown"></div>
+    </div>
+    <div id="articleInfo" class="hidden">
+      <div class="info-box">
+        <div class="info-row"><span class="info-label">아티클</span><span class="info-val" id="selArticle"></span></div>
+        <div class="info-row"><span class="info-label">사이즈</span><span class="info-val" id="selSize"></span></div>
+        <div class="info-row"><span class="info-label">패턴</span><span class="info-val" id="selPattern"></span></div>
+        <div class="info-row"><span class="info-label">NTD</span><span class="info-val" id="selNTD"></span></div>
+      </div>
+      <div class="confirm-box" id="confirmBox">
+        <label class="confirm-label" id="confirmLabel">
+          <input type="checkbox" id="confirmCheck" onchange="onConfirm()">
+          실물 타이어 사이드월과 사이즈·패턴을 직접 확인했습니다
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="section disabled" id="sec3">
+    <div class="step-header">
+      <div class="step-num" id="num3">3</div>
+      <div class="step-title">측정값 입력</div>
+    </div>
+    <div class="input-row">
+      <div>
+        <div class="label">RTD (현재 트레드깊이, mm)</div>
+        <input type="number" id="rtdInput" placeholder="예: 4.5" min="0" step="0.1" oninput="calculate()">
+      </div>
+      <div>
+        <div class="label">MTD (법적 최소, mm)</div>
+        <input type="number" id="mtdInput" value="1.6" min="0" step="0.1" oninput="calculate()">
+        <div class="sub-label">기본값 1.6mm</div>
+      </div>
+    </div>
+    <div id="rtdWarn" class="field-warn hidden"></div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="section hidden" id="sec4">
+    <div class="step-header">
+      <div class="step-num active" id="num4">4</div>
+      <div class="step-title">보상 비율</div>
+    </div>
+    <div class="result-card">
+      <div class="result-pct" id="resultPct">—</div>
+      <div class="result-sub">보상 비율 (반올림 적용)</div>
+      <div class="result-raw" id="resultRaw"></div>
+      <div id="resultBadge"></div>
+    </div>
+    <div class="formula" id="calcFormula"></div>
+  </div>
+
+</div>
+
+<script>
+const SHEET_ID = '1coZmNHe5oMw-xcjwPdPFyBchXKjXFL33Jk3ZZNw9aU4';
+const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
+const DB_DATE = '2026.04.03';
+
+let db = {}, selected = null;
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) document.getElementById('dropdown').classList.add('hidden');
+});
+
+async function loadData() {
+  const s = document.getElementById('dbStatus');
+  const m = document.getElementById('dbMeta');
+  const r = document.getElementById('refreshBtn');
+  s.className = 'db-status loading';
+  s.innerHTML = '<div class="dot loading-dot"></div> 데이터 불러오는 중...';
+  m.classList.add('hidden');
+  r.classList.add('hidden');
+  try {
+    const res = await fetch(CSV_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    parseCSV(await res.text());
+  } catch(e) {
+    s.className = 'db-status err';
+    s.innerHTML = '<div class="dot"></div> 데이터를 불러올 수 없습니다';
+    m.textContent = '구글 시트 공유 설정을 확인하거나 다시 시도해주세요';
+    m.className = 'db-meta';
+    m.classList.remove('hidden');
+    r.classList.remove('hidden');
+  }
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,''));
+  const hl = headers.map(h => h.toLowerCase());
+  const ai = hl.findIndex(h => h.includes('article'));
+  const ni = hl.findIndex(h => h === 'ntd' || h === 'otd' || h.includes('depth'));
+  const si = hl.findIndex(h => h.includes('size'));
+  const pi = hl.findIndex(h => h.includes('pattern'));
+  if (ai < 0 || ni < 0) { showErr('Article 또는 NTD 컬럼을 찾을 수 없습니다'); return; }
+  db = {};
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(',').map(v => v.trim().replace(/"/g,''));
+    const art = c[ai]; const ntd = parseFloat(c[ni]);
+    if (!art || isNaN(ntd)) continue;
+    db[art] = { ntd, size: si>=0?c[si]:'', pattern: pi>=0?c[pi]:'' };
+  }
+  const cnt = Object.keys(db).length;
+  const s = document.getElementById('dbStatus');
+  s.className = 'db-status ok';
+  s.innerHTML = `<div class="dot"></div> ${cnt}개 아티클 로드 완료`;
+  const m = document.getElementById('dbMeta');
+  const parts = DB_DATE.split('.');
+  const diff = Math.floor((new Date() - new Date(+parts[0], +parts[1]-1, +parts[2])) / 86400000);
+  m.textContent = diff > 30
+    ? `⚠ DB 기준일: ${DB_DATE} — ${diff}일 경과. 시트 업데이트 필요`
+    : `DB 기준일: ${DB_DATE} · 구글 시트 연동`;
+  m.className = diff > 30 ? 'db-meta warn' : 'db-meta';
+  m.classList.remove('hidden');
+  document.getElementById('refreshBtn').classList.remove('hidden');
+  document.getElementById('sec2').classList.remove('disabled');
+  document.getElementById('num1').classList.replace('active','done');
+}
+
+function showErr(msg) {
+  const s = document.getElementById('dbStatus');
+  s.className = 'db-status err';
+  s.innerHTML = `<div class="dot"></div> ${msg}`;
+}
+
+function onArticleInput() {
+  const q = document.getElementById('articleInput').value.trim();
+  const dd = document.getElementById('dropdown');
+  document.getElementById('articleInfo').classList.add('hidden');
+  document.getElementById('sec4').classList.add('hidden');
+  document.getElementById('sec3').classList.add('disabled');
+  selected = null;
+  if (!q || !Object.keys(db).length) { dd.classList.add('hidden'); return; }
+  const matches = Object.keys(db).filter(k => k.includes(q)).slice(0, 10);
+  if (!matches.length) { dd.classList.add('hidden'); return; }
+  dd.innerHTML = matches.map(k =>
+    `<div class="dropdown-item" onclick="selectArticle('${k}')">
+      ${k}<span>${[db[k].pattern, db[k].size].filter(Boolean).join(' · ')} — NTD ${db[k].ntd}mm</span>
+    </div>`).join('');
+  dd.classList.remove('hidden');
+  if (matches.length === 1 && matches[0] === q) selectArticle(matches[0]);
+}
+
+function selectArticle(art) {
+  selected = art;
+  document.getElementById('articleInput').value = art;
+  document.getElementById('dropdown').classList.add('hidden');
+  document.getElementById('selArticle').textContent = art;
+  document.getElementById('selSize').textContent = db[art].size || '—';
+  document.getElementById('selPattern').textContent = db[art].pattern || '—';
+  document.getElementById('selNTD').textContent = db[art].ntd + ' mm';
+  document.getElementById('confirmCheck').checked = false;
+  document.getElementById('confirmBox').classList.remove('confirmed');
+  document.getElementById('confirmLabel').classList.remove('confirmed');
+  document.getElementById('articleInfo').classList.remove('hidden');
+  document.getElementById('sec3').classList.add('disabled');
+  document.getElementById('sec4').classList.add('hidden');
+  document.getElementById('rtdInput').value = '';
+  document.getElementById('num2').classList.add('active');
+  document.getElementById('num2').classList.remove('done');
+  document.getElementById('num3').classList.remove('active','done');
+}
+
+function onConfirm() {
+  const checked = document.getElementById('confirmCheck').checked;
+  document.getElementById('confirmBox').classList.toggle('confirmed', checked);
+  document.getElementById('confirmLabel').classList.toggle('confirmed', checked);
+  if (checked) {
+    document.getElementById('sec3').classList.remove('disabled');
+    document.getElementById('num2').classList.replace('active','done');
+    document.getElementById('num3').classList.add('active');
+    document.getElementById('rtdInput').focus();
+  } else {
+    document.getElementById('sec3').classList.add('disabled');
+    document.getElementById('sec4').classList.add('hidden');
+    document.getElementById('num2').classList.add('active');
+    document.getElementById('num2').classList.remove('done');
+    document.getElementById('num3').classList.remove('active','done');
+  }
+}
+
+function calculate() {
+  if (!selected) return;
+  const rtd = parseFloat(document.getElementById('rtdInput').value);
+  const mtd = parseFloat(document.getElementById('mtdInput').value) || 1.6;
+  const ntd = db[selected].ntd;
+  const warn = document.getElementById('rtdWarn');
+  if (isNaN(rtd)) { document.getElementById('sec4').classList.add('hidden'); warn.classList.add('hidden'); return; }
+  if (rtd > ntd) { warn.textContent = 'RTD가 NTD보다 클 수 없습니다'; warn.classList.remove('hidden'); document.getElementById('sec4').classList.add('hidden'); return; }
+  if (rtd < mtd) { warn.textContent = `RTD가 법적 최소깊이(${mtd}mm)보다 낮습니다`; warn.classList.remove('hidden'); document.getElementById('sec4').classList.add('hidden'); return; }
+  warn.classList.add('hidden');
+  const raw = (rtd - mtd) / (ntd - mtd) * 100;
+  let rounded = Math.ceil(raw / 5) * 5;
+  const over86 = rounded > 86;
+  if (over86 || rounded > 100) rounded = 100;
+  document.getElementById('resultPct').textContent = rounded + '%';
+  document.getElementById('resultRaw').textContent = `계산값: ${raw.toFixed(1)}% → ${over86 ? '86% 초과로 100% 처리' : '5% 단위 올림 적용'}`;
+  const cfg = rounded===100?['full','전액 보상']:rounded>=60?['high','고비율 보상']:rounded>=30?['mid','중간 보상']:['low','저비율 보상'];
+  document.getElementById('resultBadge').innerHTML = `<span class="badge ${cfg[0]}">${cfg[1]}</span>`;
+  document.getElementById('calcFormula').textContent = `( ${rtd} − ${mtd} ) ÷ ( ${ntd} − ${mtd} ) × 100 = ${raw.toFixed(1)}%`;
+  document.getElementById('sec4').classList.remove('hidden');
+  document.getElementById('num3').classList.replace('active','done');
+  document.getElementById('num4').classList.add('active');
+}
+
+loadData();
+</script>
+</body>
+</html>
