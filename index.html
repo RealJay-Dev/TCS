@@ -72,6 +72,9 @@
   .db-meta.warn { color: var(--text-warning); }
   .refresh-btn { display: inline-block; font-size: 12px; padding: 5px 10px; border: 0.5px solid var(--border-strong); border-radius: 20px; background: none; color: var(--text-secondary); cursor: pointer; margin-top: 8px; }
   .search-wrap { position: relative; }
+  .search-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .search-tab { flex: 1; padding: 8px; font-size: 13px; font-weight: 500; border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); background: none; color: var(--text-secondary); cursor: pointer; text-align: center; transition: all 0.15s; }
+  .search-tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
   input[type=text], input[type=number] { width: 100%; padding: 12px 14px; border: 0.5px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 16px; background: var(--bg); color: var(--text); outline: none; transition: border-color 0.15s; -webkit-appearance: none; }
   input:focus { border-color: var(--text); }
   input::placeholder { color: var(--text-tertiary); }
@@ -80,6 +83,7 @@
   .dropdown-item:last-child { border-bottom: none; }
   .dropdown-item:active { background: var(--bg-secondary); }
   .dropdown-item span { display: block; font-size: 12px; color: var(--text-secondary); font-weight: 400; margin-top: 3px; }
+  .dropdown-item mark { background: none; color: var(--text); font-weight: 700; }
   .info-box { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 2px 0; margin-top: 12px; }
   .info-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 0.5px solid var(--border); }
   .info-row:last-child { border-bottom: none; }
@@ -106,6 +110,7 @@
   .badge.low { background: var(--bg-danger); color: var(--text-danger); }
   .formula { font-size: 12px; color: var(--text-tertiary); text-align: center; margin-top: 14px; font-family: monospace; }
   .hidden { display: none; }
+  .footer { margin-top: 24px; font-size: 12px; color: #888; text-align: center; line-height: 1.6; padding-bottom: 32px; }
 </style>
 </head>
 <body>
@@ -137,9 +142,37 @@
       <div class="step-num" id="num2">2</div>
       <div class="step-title">아티클 검색</div>
     </div>
-    <div class="search-wrap">
-      <input type="text" id="articleInput" placeholder="아티클 번호 입력..." autocomplete="off" oninput="onArticleInput()" onfocus="onArticleInput()">
-      <div class="dropdown hidden" id="dropdown"></div>
+
+    <!-- Search mode tabs -->
+    <div class="search-tabs">
+      <button class="search-tab active" id="tab-article" onclick="setSearchMode('article')">아티클 번호</button>
+      <button class="search-tab" id="tab-ps" onclick="setSearchMode('ps')">패턴 + 사이즈</button>
+    </div>
+
+    <!-- Mode A: article number -->
+    <div id="mode-article">
+      <div class="search-wrap">
+        <input type="text" id="articleInput" placeholder="아티클 번호 입력..." autocomplete="off" oninput="onSearchInput()" onfocus="onSearchInput()">
+        <div class="dropdown hidden" id="dropdown"></div>
+      </div>
+    </div>
+
+    <!-- Mode B: pattern → size (2-step) -->
+    <div id="mode-ps" class="hidden">
+      <!-- Step B-1: Pattern -->
+      <div class="label" style="margin-bottom:6px;">① 패턴명</div>
+      <div class="search-wrap" style="margin-bottom:10px;">
+        <input type="text" id="patternInput" placeholder="패턴명 일부 입력... (예: Sport)" autocomplete="off" oninput="onPatternInput()" onfocus="onPatternInput()">
+        <div class="dropdown hidden" id="dropdown-pattern"></div>
+      </div>
+      <!-- Step B-2: Size (disabled until pattern selected) -->
+      <div id="size-step" style="opacity:0.38; pointer-events:none; transition: opacity 0.2s;">
+        <div class="label" style="margin-bottom:6px;">② 사이즈</div>
+        <div class="search-wrap">
+          <input type="text" id="sizeInput" placeholder="사이즈 일부 입력... (예: 225 또는 45)" autocomplete="off" oninput="onSizeInput()" onfocus="onSizeInput()">
+          <div class="dropdown hidden" id="dropdown-size"></div>
+        </div>
+      </div>
     </div>
     <div id="articleInfo" class="hidden">
       <div class="info-box">
@@ -185,7 +218,7 @@
     </div>
     <div class="result-card">
       <div class="result-pct" id="resultPct">—</div>
-      <div class="result-sub">보상 비율 (반올림 적용)</div>
+      <div class="result-sub">보상 비율 (nearest 5% 반올림 적용)</div>
       <div class="result-raw" id="resultRaw"></div>
       <div id="resultBadge"></div>
     </div>
@@ -193,22 +226,68 @@
   </div>
 
 </div>
-<div style="margin-top:24px; font-size:12px; color:#888; text-align:center; line-height:1.6;">
+
+<div class="footer">
   Developed by CTK TCS.<br>
   Any unauthorized commercial use, modification, or distribution of this tool is strictly prohibited.<br>
   본 도구의 상업적 활용 및 무단 변조/배포를 엄격히 금지합니다.
 </div>
+
 <script>
 const SHEET_ID = '1coZmNHe5oMw-xcjwPdPFyBchXKjXFL33Jk3ZZNw9aU4';
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/1coZmNHe5oMw-xcjwPdPFyBchXKjXFL33Jk3ZZNw9aU4/export?format=csv&gid=654494156';
 const DB_DATE = '2026.04.03';
 
-let db = {}, selected = null;
+let db = {}, selected = null, searchMode = 'article';
 
 document.addEventListener('click', e => {
-  if (!e.target.closest('.search-wrap')) document.getElementById('dropdown').classList.add('hidden');
+  if (!e.target.closest('#mode-article')) document.getElementById('dropdown').classList.add('hidden');
+  if (!e.target.closest('#mode-ps')) {
+    document.getElementById('dropdown-pattern').classList.add('hidden');
+    document.getElementById('dropdown-size').classList.add('hidden');
+  }
 });
 
+// ── Search mode ──────────────────────────────────────────────
+function setSearchMode(mode) {
+  searchMode = mode;
+  document.getElementById('tab-article').classList.toggle('active', mode === 'article');
+  document.getElementById('tab-ps').classList.toggle('active', mode === 'ps');
+  document.getElementById('mode-article').classList.toggle('hidden', mode !== 'article');
+  document.getElementById('mode-ps').classList.toggle('hidden', mode !== 'ps');
+  // reset
+  selectedPattern = null;
+  document.getElementById('articleInput').value = '';
+  document.getElementById('patternInput').value = '';
+  document.getElementById('sizeInput').value = '';
+  document.getElementById('dropdown').classList.add('hidden');
+  document.getElementById('dropdown-pattern').classList.add('hidden');
+  document.getElementById('dropdown-size').classList.add('hidden');
+  document.getElementById('size-step').style.opacity = '0.38';
+  document.getElementById('size-step').style.pointerEvents = 'none';
+  document.getElementById('articleInfo').classList.add('hidden');
+  document.getElementById('sec3').classList.add('disabled');
+  document.getElementById('sec4').classList.add('hidden');
+  selected = null;
+  if (mode === 'article') document.getElementById('articleInput').focus();
+  else document.getElementById('patternInput').focus();
+}
+
+// ── Sample data (fallback for preview / CORS blocked env) ────
+const SAMPLE_DB = {
+  '03202810000': { ntd: 7.4, size: '175/65 R 15', pattern: 'AllSeasonContact 2' },
+  '03105790000': { ntd: 7.5, size: '195/65 R 15', pattern: 'EcoContact 6' },
+  '03585830000': { ntd: 8.0, size: '225/45 R 17', pattern: 'ContiSportContact 5' },
+  '03103490000': { ntd: 7.8, size: '205/55 R 16', pattern: 'PremiumContact 7' },
+  '03492010000': { ntd: 8.5, size: '235/45 R 18', pattern: 'SportContact 7' },
+  '03600120000': { ntd: 7.0, size: '185/60 R 15', pattern: 'EcoContact 6' },
+  '03712340000': { ntd: 9.0, size: '275/40 R 20', pattern: 'SportContact 7' },
+  '03801560000': { ntd: 7.6, size: '215/60 R 16', pattern: 'AllSeasonContact 2' },
+  '03157040000': { ntd: 9.5, size: '235/55 R 19', pattern: 'CrossContact DWS06+' },
+  '03157050000': { ntd: 9.5, size: '255/50 R 20', pattern: 'CrossContact DWS06+' },
+};
+
+// ── Data loading ─────────────────────────────────────────────
 async function loadData() {
   const s = document.getElementById('dbStatus');
   const m = document.getElementById('dbMeta');
@@ -222,18 +301,51 @@ async function loadData() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     parseCSV(await res.text());
   } catch(e) {
-    s.className = 'db-status err';
-    s.innerHTML = '<div class="dot"></div> 데이터를 불러올 수 없습니다';
-    m.textContent = '구글 시트 공유 설정을 확인하거나 다시 시도해주세요';
-    m.className = 'db-meta';
-    m.classList.remove('hidden');
-    r.classList.remove('hidden');
+    // CORS or network block (e.g. claude.ai preview) → use sample data
+    useSampleData();
   }
+}
+
+function useSampleData() {
+  db = SAMPLE_DB;
+  const s = document.getElementById('dbStatus');
+  s.className = 'db-status loading';
+  s.innerHTML = '<div class="dot"></div> 샘플 데이터로 실행 중 (프리뷰 모드)';
+  s.style.background = 'var(--bg-warning)';
+  s.style.color = 'var(--text-warning)';
+  const m = document.getElementById('dbMeta');
+  m.textContent = '⚠ 구글 시트 연결 불가 (CORS) — 실제 배포 환경에서는 정상 연결됩니다';
+  m.className = 'db-meta warn';
+  m.classList.remove('hidden');
+  document.getElementById('refreshBtn').classList.remove('hidden');
+  document.getElementById('sec2').classList.remove('disabled');
+  document.getElementById('num1').classList.replace('active','done');
+}
+
+// Proper RFC-4180 CSV parser — handles quoted fields with commas/special chars
+function parseCSVRow(line) {
+  const cells = [];
+  let cur = '', inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuote) {
+      if (ch === '"') {
+        if (line[i+1] === '"') { cur += '"'; i++; } // escaped quote
+        else inQuote = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQuote = true;
+      else if (ch === ',') { cells.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+  }
+  cells.push(cur.trim());
+  return cells;
 }
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,''));
+  const headers = parseCSVRow(lines[0]).map(h => h.replace(/"/g,'').trim());
   const hl = headers.map(h => h.toLowerCase());
   const ai = hl.findIndex(h => h.includes('article'));
   const ni = hl.findIndex(h => h === 'ntd' || h === 'otd' || h.includes('depth'));
@@ -242,7 +354,7 @@ function parseCSV(text) {
   if (ai < 0 || ni < 0) { showErr('Article 또는 NTD 컬럼을 찾을 수 없습니다'); return; }
   db = {};
   for (let i = 1; i < lines.length; i++) {
-    const c = lines[i].split(',').map(v => v.trim().replace(/"/g,''));
+    const c = parseCSVRow(lines[i]);
     const art = c[ai]; const ntd = parseFloat(c[ni]);
     if (!art || isNaN(ntd)) continue;
     db[art] = { ntd, size: si>=0?c[si]:'', pattern: pi>=0?c[pi]:'' };
@@ -270,23 +382,129 @@ function showErr(msg) {
   s.innerHTML = `<div class="dot"></div> ${msg}`;
 }
 
-function onArticleInput() {
+// ── Helpers ──────────────────────────────────────────────────
+function highlight(text, q) {
+  if (!q || !text) return text || '';
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return text;
+  return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + q.length) + '</mark>' + text.slice(idx + q.length);
+}
+
+// ── Search: Article number ────────────────────────────────────
+function onSearchInput() {
   const q = document.getElementById('articleInput').value.trim();
   const dd = document.getElementById('dropdown');
+  resetSelection();
+  if (!q || !Object.keys(db).length) { dd.classList.add('hidden'); return; }
+  const ql = q.toLowerCase();
+  const matches = Object.keys(db).filter(k => k.toLowerCase().includes(ql)).slice(0, 10);
+  if (!matches.length) { dd.classList.add('hidden'); return; }
+  dd.innerHTML = matches.map(k => {
+    const d = db[k];
+    return `<div class="dropdown-item" onclick="selectArticle('${k}')">
+      ${highlight(k, q)}<span>${[d.pattern, d.size].filter(Boolean).join(' · ')} — NTD ${d.ntd}mm</span>
+    </div>`;
+  }).join('');
+  dd.classList.remove('hidden');
+  if (matches.length === 1 && matches[0] === q) selectArticle(matches[0]);
+}
+
+// ── Search: Pattern → Size (2-step) ──────────────────────────
+let selectedPattern = null;
+
+function onPatternInput() {
+  const q = document.getElementById('patternInput').value.trim();
+  const dd = document.getElementById('dropdown-pattern');
+  // reset downstream
+  selectedPattern = null;
+  document.getElementById('sizeInput').value = '';
+  document.getElementById('size-step').style.opacity = '0.38';
+  document.getElementById('size-step').style.pointerEvents = 'none';
+  document.getElementById('dropdown-size').classList.add('hidden');
+  resetSelection();
+
+  if (!q) { dd.classList.add('hidden'); return; }
+  const ql = q.toLowerCase();
+
+  // collect unique pattern names that match
+  const patterns = [...new Set(
+    Object.values(db)
+      .map(v => v.pattern)
+      .filter(p => p && p.toLowerCase().includes(ql))
+  )].slice(0, 10);
+
+  if (!patterns.length) {
+    dd.innerHTML = '<div class="dropdown-item" style="color:var(--text-tertiary);cursor:default;">검색 결과 없음</div>';
+    dd.classList.remove('hidden');
+    return;
+  }
+  dd.innerHTML = patterns.map(p =>
+    `<div class="dropdown-item" onclick="selectPattern('${p.replace(/'/g,"\\'")}')">
+      ${highlight(p, q)}
+    </div>`
+  ).join('');
+  dd.classList.remove('hidden');
+}
+
+function selectPattern(pattern) {
+  selectedPattern = pattern;
+  document.getElementById('patternInput').value = pattern;
+  document.getElementById('dropdown-pattern').classList.add('hidden');
+  // activate size step
+  document.getElementById('size-step').style.opacity = '1';
+  document.getElementById('size-step').style.pointerEvents = 'auto';
+  document.getElementById('sizeInput').value = '';
+  document.getElementById('dropdown-size').classList.add('hidden');
+  resetSelection();
+  document.getElementById('sizeInput').focus();
+}
+
+function onSizeInput() {
+  if (!selectedPattern) return;
+  const q = document.getElementById('sizeInput').value.trim();
+  const dd = document.getElementById('dropdown-size');
+  resetSelection();
+
+  // articles matching selected pattern
+  const candidates = Object.entries(db).filter(([k, v]) => v.pattern === selectedPattern);
+
+  if (!q) {
+    // show all sizes for this pattern
+    const items = candidates.slice(0, 15);
+    dd.innerHTML = items.map(([k, v]) =>
+      `<div class="dropdown-item" onclick="selectArticle('${k}')">
+        ${v.size}<span>${k} — NTD ${v.ntd}mm</span>
+      </div>`
+    ).join('');
+    dd.classList.remove('hidden');
+    return;
+  }
+
+  const ql = q.toLowerCase();
+  const matches = candidates.filter(([k, v]) => v.size && v.size.toLowerCase().includes(ql)).slice(0, 15);
+
+  if (!matches.length) {
+    dd.innerHTML = '<div class="dropdown-item" style="color:var(--text-tertiary);cursor:default;">해당 사이즈 없음</div>';
+    dd.classList.remove('hidden');
+    return;
+  }
+  dd.innerHTML = matches.map(([k, v]) =>
+    `<div class="dropdown-item" onclick="selectArticle('${k}')">
+      ${highlight(v.size, q)}<span>${k} — NTD ${v.ntd}mm</span>
+    </div>`
+  ).join('');
+  dd.classList.remove('hidden');
+}
+
+function resetSelection() {
   document.getElementById('articleInfo').classList.add('hidden');
   document.getElementById('sec4').classList.add('hidden');
   document.getElementById('sec3').classList.add('disabled');
   selected = null;
-  if (!q || !Object.keys(db).length) { dd.classList.add('hidden'); return; }
-  const matches = Object.keys(db).filter(k => k.includes(q)).slice(0, 10);
-  if (!matches.length) { dd.classList.add('hidden'); return; }
-  dd.innerHTML = matches.map(k =>
-    `<div class="dropdown-item" onclick="selectArticle('${k}')">
-      ${k}<span>${[db[k].pattern, db[k].size].filter(Boolean).join(' · ')} — NTD ${db[k].ntd}mm</span>
-    </div>`).join('');
-  dd.classList.remove('hidden');
-  if (matches.length === 1 && matches[0] === q) selectArticle(matches[0]);
 }
+
+// kept for backward compat
+function onArticleInput() { onSearchInput(); }
 
 function selectArticle(art) {
   selected = art;
@@ -326,25 +544,45 @@ function onConfirm() {
   }
 }
 
+// ── Calculate ─────────────────────────────────────────────────
+// Policy (confirmed with Xuan):
+//   1. If raw > 86% → 100% immediately (BEFORE rounding)
+//   2. Otherwise → round to nearest 5% (MROUND equivalent)
+function roundNearest5(val) {
+  return Math.round(val / 5) * 5;
+}
+
 function calculate() {
   if (!selected) return;
   const rtd = parseFloat(document.getElementById('rtdInput').value);
   const mtd = parseFloat(document.getElementById('mtdInput').value) || 1.6;
   const ntd = db[selected].ntd;
   const warn = document.getElementById('rtdWarn');
+
   if (isNaN(rtd)) { document.getElementById('sec4').classList.add('hidden'); warn.classList.add('hidden'); return; }
   if (rtd > ntd) { warn.textContent = 'RTD가 NTD보다 클 수 없습니다'; warn.classList.remove('hidden'); document.getElementById('sec4').classList.add('hidden'); return; }
   if (rtd < mtd) { warn.textContent = `RTD가 법적 최소깊이(${mtd}mm)보다 낮습니다`; warn.classList.remove('hidden'); document.getElementById('sec4').classList.add('hidden'); return; }
   warn.classList.add('hidden');
-  const raw = (rtd - mtd) / (ntd - mtd) * 100;
-  let rounded = Math.ceil(raw / 5) * 5;
-  const over86 = rounded > 86;
-  if (over86 || rounded > 100) rounded = 100;
+
+  const raw = Math.round(((rtd - mtd) / (ntd - mtd) * 100) * 10000) / 10000; // 소수점 4자리로 부동소수점 오차 제거
+
+  // Step 1: 86% 초과 먼저 체크
+  let rounded, note;
+  if (raw > 86) {
+    rounded = 100;
+    note = `계산값 86.0% 초과 (${raw.toFixed(5)}%) → 100% 처리`;
+  } else {
+    // Step 2: nearest 5% 반올림
+    rounded = roundNearest5(raw);
+    if (rounded > 100) rounded = 100;
+    note = `계산값: ${raw.toFixed(5)}% → nearest 5% 반올림 적용`;
+  }
+
   document.getElementById('resultPct').textContent = rounded + '%';
-  document.getElementById('resultRaw').textContent = `계산값: ${raw.toFixed(1)}% → ${over86 ? '86% 초과로 100% 처리' : '5% 단위 올림 적용'}`;
+  document.getElementById('resultRaw').textContent = note;
   const cfg = rounded===100?['full','전액 보상']:rounded>=60?['high','고비율 보상']:rounded>=30?['mid','중간 보상']:['low','저비율 보상'];
   document.getElementById('resultBadge').innerHTML = `<span class="badge ${cfg[0]}">${cfg[1]}</span>`;
-  document.getElementById('calcFormula').textContent = `( ${rtd} − ${mtd} ) ÷ ( ${ntd} − ${mtd} ) × 100 = ${raw.toFixed(1)}%`;
+  document.getElementById('calcFormula').textContent = `( ${rtd} − ${mtd} ) ÷ ( ${ntd} − ${mtd} ) × 100 = ${raw.toFixed(5)}%`;
   document.getElementById('sec4').classList.remove('hidden');
   document.getElementById('num3').classList.replace('active','done');
   document.getElementById('num4').classList.add('active');
