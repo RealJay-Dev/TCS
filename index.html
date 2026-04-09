@@ -236,8 +236,6 @@
 <script>
 const SHEET_ID = '1coZmNHe5oMw-xcjwPdPFyBchXKjXFL33Jk3ZZNw9aU4';
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/1coZmNHe5oMw-xcjwPdPFyBchXKjXFL33Jk3ZZNw9aU4/export?format=csv&gid=654494156';
-const DB_DATE = '2026.04.03';
-
 let db = {}, selected = null, searchMode = 'article';
 
 document.addEventListener('click', e => {
@@ -345,30 +343,47 @@ function parseCSVRow(line) {
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
-  const headers = parseCSVRow(lines[0]).map(h => h.replace(/"/g,'').trim());
+
+  // 1행: 날짜 읽기 (A1셀) — "2026. 4. 9" 또는 "2026.04.09" 형식 모두 처리
+  const dateRaw = parseCSVRow(lines[0])[0].replace(/"/g,'').trim();
+  const dateParsed = dateRaw.replace(/\s/g,''); // 공백 제거
+  const dateParts = dateParsed.split('.');
+  let dbDateStr = dateRaw;
+  if (dateParts.length === 3) {
+    const y = dateParts[0].trim();
+    const m = dateParts[1].trim().padStart(2,'0');
+    const d = dateParts[2].trim().padStart(2,'0');
+    dbDateStr = `${y}.${m}.${d}`;
+  }
+
+  // 2행: 헤더
+  const headers = parseCSVRow(lines[1]).map(h => h.replace(/"/g,'').trim());
   const hl = headers.map(h => h.toLowerCase());
   const ai = hl.findIndex(h => h.includes('article'));
   const ni = hl.findIndex(h => h === 'ntd' || h === 'otd' || h.includes('depth'));
   const si = hl.findIndex(h => h.includes('size'));
   const pi = hl.findIndex(h => h.includes('pattern'));
   if (ai < 0 || ni < 0) { showErr('Article 또는 NTD 컬럼을 찾을 수 없습니다'); return; }
+
+  // 3행~: 데이터
   db = {};
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = 2; i < lines.length; i++) {
     const c = parseCSVRow(lines[i]);
     const art = c[ai]; const ntd = parseFloat(c[ni]);
     if (!art || isNaN(ntd)) continue;
     db[art] = { ntd, size: si>=0?c[si]:'', pattern: pi>=0?c[pi]:'' };
   }
+
   const cnt = Object.keys(db).length;
   const s = document.getElementById('dbStatus');
   s.className = 'db-status ok';
   s.innerHTML = `<div class="dot"></div> ${cnt}개 아티클 로드 완료`;
   const m = document.getElementById('dbMeta');
-  const parts = DB_DATE.split('.');
-  const diff = Math.floor((new Date() - new Date(+parts[0], +parts[1]-1, +parts[2])) / 86400000);
+  const pp = dbDateStr.split('.');
+  const diff = Math.floor((new Date() - new Date(+pp[0], +pp[1]-1, +pp[2])) / 86400000);
   m.textContent = diff > 30
-    ? `⚠ DB 기준일: ${DB_DATE} — ${diff}일 경과. 시트 업데이트 필요`
-    : `DB 기준일: ${DB_DATE} · 구글 시트 연동`;
+    ? `⚠ DB 기준일: ${dbDateStr} — ${diff}일 경과. 시트 업데이트 필요`
+    : `DB 기준일: ${dbDateStr} · 구글 시트 연동`;
   m.className = diff > 30 ? 'db-meta warn' : 'db-meta';
   m.classList.remove('hidden');
   document.getElementById('refreshBtn').classList.remove('hidden');
