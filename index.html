@@ -179,6 +179,7 @@
         <div class="info-row"><span class="info-label">아티클</span><span class="info-val" id="selArticle"></span></div>
         <div class="info-row"><span class="info-label">사이즈</span><span class="info-val" id="selSize"></span></div>
         <div class="info-row"><span class="info-label">패턴</span><span class="info-val" id="selPattern"></span></div>
+        <div class="info-row"><span class="info-label">하중·속도지수</span><span class="info-val" id="selLoadSpeed"></span></div>
         <div class="info-row"><span class="info-label">NTD</span><span class="info-val" id="selNTD"></span></div>
       </div>
       <div class="confirm-box" id="confirmBox">
@@ -203,8 +204,8 @@
       </div>
       <div>
         <div class="label">MTD (법적 최소, mm)</div>
-        <input type="number" id="mtdInput" value="1.6" min="0" step="0.1" oninput="calculate()">
-        <div class="sub-label">기본값 1.6mm</div>
+        <input type="number" id="mtdInput" value="1.6" min="0" step="0.1" oninput="calculate()" disabled style="opacity:0.5;cursor:not-allowed;">
+        <div class="sub-label">1.6mm 고정</div>
       </div>
     </div>
     <div id="rtdWarn" class="field-warn hidden"></div>
@@ -363,6 +364,7 @@ function parseCSV(text) {
   const ni = hl.findIndex(h => h === 'ntd' || h === 'otd' || h.includes('depth'));
   const si = hl.findIndex(h => h.includes('size'));
   const pi = hl.findIndex(h => h.includes('pattern'));
+  const di = hl.findIndex(h => h.includes('description') || h.includes('material'));
   if (ai < 0 || ni < 0) { showErr('Article 또는 NTD 컬럼을 찾을 수 없습니다'); return; }
 
   // 3행~: 데이터
@@ -371,7 +373,8 @@ function parseCSV(text) {
     const c = parseCSVRow(lines[i]);
     const art = c[ai]; const ntd = parseFloat(c[ni]);
     if (!art || isNaN(ntd)) continue;
-    db[art] = { ntd, size: si>=0?c[si]:'', pattern: pi>=0?c[pi]:'' };
+    const desc = di>=0 ? c[di] : '';
+    db[art] = { ntd, size: si>=0?c[si]:'', pattern: pi>=0?c[pi]:'', desc, loadSpeed: parseLoadSpeed(desc, si>=0?c[si]:'') };
   }
 
   const cnt = Object.keys(db).length;
@@ -398,6 +401,20 @@ function showErr(msg) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
+function parseLoadSpeed(desc, size) {
+  if (!desc || !size) return '—';
+  // 사이즈 이후 텍스트에서 하중지수+속도지수 추출
+  // 예: "235/55R19 105W XL FR..." → "105W"
+  // 예: "185R14C 102/100Q VanContact..." → "102/100Q"
+  const sizeEscaped = size.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = desc.match(new RegExp(sizeEscaped + '\\s+([0-9]+\\/[0-9]+[A-Za-z]+|[0-9]+[A-Za-z]+)'));
+  if (match) return match[1];
+  // size가 desc에 약간 다르게 있을 수 있으니 숫자만으로도 시도
+  const numOnly = size.replace(/[^0-9]/g, '');
+  const m2 = desc.match(/\d[\d\/]*[A-Za-z]+/);
+  if (m2) return m2[0];
+  return '—';
+}
 function highlight(text, q) {
   if (!q || !text) return text || '';
   const idx = text.toLowerCase().indexOf(q.toLowerCase());
@@ -474,17 +491,20 @@ function selectPattern(pattern) {
   document.getElementById('sizeInput').focus();
 }
 
+function normalizeSize(str) {
+  // 245/45R18 → 2454518, 숫자만 추출
+  return str.replace(/[^0-9]/g, '');
+}
+
 function onSizeInput() {
   if (!selectedPattern) return;
   const q = document.getElementById('sizeInput').value.trim();
   const dd = document.getElementById('dropdown-size');
   resetSelection();
 
-  // articles matching selected pattern
   const candidates = Object.entries(db).filter(([k, v]) => v.pattern === selectedPattern);
 
   if (!q) {
-    // show all sizes for this pattern
     const items = candidates.slice(0, 15);
     dd.innerHTML = items.map(([k, v]) =>
       `<div class="dropdown-item" onclick="selectArticle('${k}')">
@@ -496,7 +516,12 @@ function onSizeInput() {
   }
 
   const ql = q.toLowerCase();
-  const matches = candidates.filter(([k, v]) => v.size && v.size.toLowerCase().includes(ql)).slice(0, 15);
+  const qNum = normalizeSize(q);
+  const matches = candidates.filter(([k, v]) => {
+    if (!v.size) return false;
+    // 일반 텍스트 검색 또는 숫자만 검색 둘 다 지원
+    return v.size.toLowerCase().includes(ql) || (qNum && normalizeSize(v.size).includes(qNum));
+  }).slice(0, 15);
 
   if (!matches.length) {
     dd.innerHTML = '<div class="dropdown-item" style="color:var(--text-tertiary);cursor:default;">해당 사이즈 없음</div>';
@@ -528,6 +553,7 @@ function selectArticle(art) {
   document.getElementById('selArticle').textContent = art;
   document.getElementById('selSize').textContent = db[art].size || '—';
   document.getElementById('selPattern').textContent = db[art].pattern || '—';
+  document.getElementById('selLoadSpeed').textContent = db[art].loadSpeed || '—';
   document.getElementById('selNTD').textContent = db[art].ntd + ' mm';
   document.getElementById('confirmCheck').checked = false;
   document.getElementById('confirmBox').classList.remove('confirmed');
