@@ -554,7 +554,7 @@ function selectArticle(art) {
   document.getElementById('selSize').textContent = db[art].size || '—';
   document.getElementById('selPattern').textContent = db[art].pattern || '—';
   document.getElementById('selLoadSpeed').textContent = db[art].loadSpeed || '—';
-  document.getElementById('selNTD').textContent = db[art].ntd + ' mm';
+  document.getElementById('selNTD').textContent = db[art].ntd.toFixed(1) + ' mm';
   document.getElementById('confirmCheck').checked = false;
   document.getElementById('confirmBox').classList.remove('confirmed');
   document.getElementById('confirmLabel').classList.remove('confirmed');
