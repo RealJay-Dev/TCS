@@ -321,7 +321,7 @@ function parseSupabase(rows) {
   const m = document.getElementById('dbMeta');
   // updated_at 최신값으로 날짜 표시
   const latest = rows.reduce((a, b) => a.updated_at > b.updated_at ? a : b, rows[0]);
-  const dateStr = latest ? new Date(latest.updated_at).toLocaleDateString('ko-KR') : '—';
+  const dateStr = latest ? new Date(latest.updated_at).toLocaleDateString('ko-KR', {year:'numeric', month:'2-digit', day:'2-digit'}) : '—';
   m.textContent = `DB 기준일: ${dateStr} · Supabase 연동`;
   m.className = 'db-meta';
   m.classList.remove('hidden');
