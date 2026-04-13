@@ -311,7 +311,7 @@ function parseSupabase(rows) {
       size: row.size || '',
       pattern: row.pattern || '',
       desc: row.description || '',
-      loadSpeed: parseLoadSpeed(row.description || '', row.size || '')
+      loadSpeed: row.li_ss || '—'
     };
   }
   const cnt = Object.keys(db).length;
@@ -336,20 +336,6 @@ function showErr(msg) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
-function parseLoadSpeed(desc, size) {
-  if (!desc || !size) return '—';
-  // 사이즈 이후 텍스트에서 하중지수+속도지수 추출
-  // 예: "235/55R19 105W XL FR..." → "105W"
-  // 예: "185R14C 102/100Q VanContact..." → "102/100Q"
-  const sizeEscaped = size.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = desc.match(new RegExp(sizeEscaped + '\\s+([0-9]+\\/[0-9]+[A-Za-z]+|[0-9]+[A-Za-z]+)'));
-  if (match) return match[1];
-  // size가 desc에 약간 다르게 있을 수 있으니 숫자만으로도 시도
-  const numOnly = size.replace(/[^0-9]/g, '');
-  const m2 = desc.match(/\d[\d\/]*[A-Za-z]+/);
-  if (m2) return m2[0];
-  return '—';
-}
 function highlight(text, q) {
   if (!q || !text) return text || '';
   const idx = text.toLowerCase().indexOf(q.toLowerCase());
